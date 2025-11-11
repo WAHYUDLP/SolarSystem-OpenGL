@@ -321,26 +321,11 @@ public:
 
         glGenVertexArrays(1, &vao);
         glGenBuffers(1, &vbo);
-        // --- REVISI --- Tidak perlu EBO
-        // glGenBuffers(1, &ebo);
 
         glBindVertexArray(vao);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), &data[0], GL_STATIC_DRAW);
-
-        // --- REVISI --- Hapus EBO
-        /*
-        unsigned int indices[] = {
-            0, 1, 2,
-            2, 3, 0
-        };
-        indexCount = 6;
-        glGenBuffers(1, &ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-        */
-
 
         // Atribut Posisi (layout = 0)
         glEnableVertexAttribArray(0);
@@ -357,7 +342,6 @@ public:
         glBindVertexArray(vao);
         // --- REVISSI --- Gunakan glDrawArrays dengan GL_TRIANGLE_STRIP
         glDrawArrays(GL_TRIANGLE_STRIP, 0, vertexCount);
-        // glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
     }
 };
@@ -416,8 +400,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 void processInput(GLFWwindow* window);
 unsigned int loadTexture(char const* path);
-// --- REVISI --- Tambahkan Ring& dan texture ID cincin
-void renderScene(Shader& shader, Shader& pickingShader, Shader& orbitShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, bool isPicking);
+// --- REVISI --- Tambahkan Ring& dan texture ID cincin DAN skybox
+void renderScene(Shader& shader, Shader& pickingShader, Shader& orbitShader, Shader& skyboxShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, unsigned int texGalaxy, bool isPicking);
 // --- AKHIR REVISI ---
 void processPicking(std::vector<Planet>& planets, Planet& sun);
 void RenderUI();
@@ -463,6 +447,9 @@ int main()
 
     // Aktifkan Uji Kedalaman, MSAA, dan Blending
     glEnable(GL_DEPTH_TEST);
+    // --- REVISI --- Ganti fungsi depth test untuk skybox
+    glDepthFunc(GL_LEQUAL); // Default-nya GL_LESS
+    // --- AKHIR REVISI ---
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND); // --- REVISI --- Pastikan blending aktif untuk cincin
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -471,6 +458,7 @@ int main()
     Shader mainShader("shader.vs", "shader.fs");
     Shader pickingShader("picking.vs", "picking.fs");
     Shader orbitShader("orbit.vs", "orbit.fs");
+    Shader skyboxShader("skybox.vs", "skybox.fs"); // --- REVISI --- Muat shader skybox
 
     // Buat Mesh
     Sphere sphere;
@@ -496,16 +484,17 @@ int main()
     ImGui_ImplOpenGL3_Init("#version 330");
 
     // Muat Tekstur
-    unsigned int texSun = loadTexture("sun.jpg");
-    unsigned int texMercury = loadTexture("merkurius.jpg");
-    unsigned int texVenus = loadTexture("venus.jpg");
-    unsigned int texEarth = loadTexture("bumi.jpg");
-    unsigned int texMars = loadTexture("mars.jpg");
-    unsigned int texJupiter = loadTexture("jupiter.jpg");
-    unsigned int texSaturn = loadTexture("saturnus.jpg");
-    unsigned int texSaturnRing = loadTexture("saturnus_cincin.png"); // --- REVISI --- Muat tekstur cincin
-    unsigned int texUranus = loadTexture("uranus.jpg");
-    unsigned int texNeptune = loadTexture("neptun.jpg");
+    unsigned int texSun = loadTexture("aset/sun.jpg");
+    unsigned int texMercury = loadTexture("aset/merkurius.jpg");
+    unsigned int texVenus = loadTexture("aset/venus.jpg");
+    unsigned int texEarth = loadTexture("aset/bumi.jpg");
+    unsigned int texMars = loadTexture("aset/mars.jpg");
+    unsigned int texJupiter = loadTexture("aset/jupiter.jpg");
+    unsigned int texSaturn = loadTexture("aset/saturnus.jpg");
+    unsigned int texSaturnRing = loadTexture("aset/saturnus_cincin.png"); // --- REVISI --- Muat tekstur cincin
+    unsigned int texUranus = loadTexture("aset/uranus.jpg");
+    unsigned int texNeptune = loadTexture("aset/neptun.jpg");
+    unsigned int texGalaxy = loadTexture("aset/galaksi.jpg"); // --- REVISI --- Muat tekstur galaksi
 
     // Data Tata Surya
     Planet sun("Matahari", "Bintang di pusat Tata Surya.", texSun, 3.5f, 0.0f, 0.0f, 1);
@@ -591,8 +580,8 @@ int main()
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // --- REVISI --- Tambahkan ring, texSaturnRing
-            renderScene(mainShader, pickingShader, orbitShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, true);
+            // --- REVISI --- Tambahkan ring, texSaturnRing, skyboxShader, texGalaxy
+            renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, true);
 
             processPicking(planets, sun);
 
@@ -603,8 +592,8 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // --- REVISI --- Tambahkan ring, texSaturnRing
-        renderScene(mainShader, pickingShader, orbitShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, false);
+        // --- REVISI --- Tambahkan ring, texSaturnRing, skyboxShader, texGalaxy
+        renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, false);
 
         // --- Render UI di atas segalanya
         RenderUI();
@@ -628,10 +617,40 @@ int main()
 
 // --- Implementasi Fungsi ---
 
-// --- REVISI --- Tambahkan Ring& ring, unsigned int texSaturnRing
-void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, bool isPicking)
+// --- REVISI --- Tambahkan Shader& skyboxShader, unsigned int texGalaxy
+void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader, Shader& skyboxShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, unsigned int texGalaxy, bool isPicking)
 {
     Shader& activeShader = isPicking ? pickingShader : mainShader;
+
+    // --- REVISI --- Pindahkan 'use' dan 'set uniforms' ke *setelah* skybox
+    //                agar skybox digambar LEBIH DULU
+
+    // --- REVISI --- Gambar Skybox (di paling awal, kecuali saat picking) ---
+    if (!isPicking)
+    {
+        // Kita menggunakan glDepthFunc(GL_LEQUAL) dari main()
+        skyboxShader.use();
+
+        // Buat view matrix HANYA untuk rotasi
+        // Hapus info translasi (posisi) dari kamera
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp)));
+        glm::mat4 projection = glm::perspective(glm::radians(fov), (float)g_framebufferWidth / (float)g_framebufferHeight, 0.1f, 200.0f);
+
+        skyboxShader.setMat4("view", skyboxView);
+        skyboxShader.setMat4("projection", projection);
+
+        // Gambar skybox (sphere)
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texGalaxy);
+        skyboxShader.setInt("skybox", 0);
+
+        // Kita gunakan mesh Sphere yang sama untuk menggambar skybox!
+        sphere.Draw();
+    }
+    // --- AKHIR REVISI ---
+
+
+    // --- Sekarang gambar sisa scene ---
     activeShader.use();
 
     // --- REVISI --- Kita perlu menghitung view matrix secara manual di sini
@@ -660,6 +679,7 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sun.textureID);
         activeShader.setInt("texture_diffuse1", 0);
+        // --- REVISI --- Biarkan Matahari menyala (tidak pakai tekstur)
         activeShader.setBool("isSun", true);
     }
     sphere.Draw();
@@ -714,14 +734,8 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
             // Buat model matrix baru untuk cincin
             glm::mat4 modelRing = glm::mat4(1.0f);
             modelRing = glm::translate(modelRing, currentPos); // Posisi sama dengan planet
-            //// Miringkan cincin sedikit
-            //modelRing = glm::rotate(modelRing, glm::radians(25.0f), glm::normalize(glm::vec3(0.5f, 0.0f, 0.5f)));
-            //// Buat skala cincin lebih besar dari planet
-            //modelRing = glm::scale(modelRing, glm::vec3(planet.size * 2.2f));
-            //activeShader.setMat4("model", modelRing);
             // Miringkan cincin sedikit
-            modelRing = glm::rotate(modelRing, glm::radians(25.0f), glm::normalize(glm::vec3(0.5f, 0.0f, 0.5f)));
-            // --- REVISI --- Buat skala cincin sedikit lebih kecil
+            modelRing = glm::rotate(modelRing, glm::radians(45.0f), glm::normalize(glm::vec3(0.5f, 0.0f, 0.5f))); // Sebelumnya 25.0f            // --- REVISI --- Buat skala cincin sedikit lebih kecil
             modelRing = glm::scale(modelRing, glm::vec3(planet.size * 1.8f)); // Sebelumnya 2.2f
             activeShader.setMat4("model", modelRing);
 
@@ -749,6 +763,8 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
             orbitLine.Draw();
         }
     }
+
+    // --- REVISI --- Hapus skybox dari sini, pindah ke atas
 }
 
 // --- Fungsi UI Baru ---
@@ -896,8 +912,13 @@ unsigned int loadTexture(char const* path)
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // --- REVISI --- Ganti mode wrapping untuk skybox (dan planet)
+        // GL_CLAMP_TO_EDGE lebih baik untuk memetakan tekstur ke bola (mencegah "seam" di kutub)
+        // daripada GL_REPEAT.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Sebelumnya GL_REPEAT
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Sebelumnya GL_REPEAT
+        // --- AKHIR REVISI ---
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 

@@ -38,5 +38,9 @@
     <None Include="orbit.fs">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="skybox.vs">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="skybox.fs" />
   </ItemGroup>
 </Project>
