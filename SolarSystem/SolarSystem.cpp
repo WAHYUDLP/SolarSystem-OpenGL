@@ -6,8 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/norm.hpp> 
-#include <glm/gtx/compatibility.hpp> 
+#include <glm/gtx/norm.hpp>
+#include <glm/gtx/compatibility.hpp>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -22,6 +22,7 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <cstdint> // Untuk intptr_t
 
 // --- Struktur Data Planet ---
 struct Planet
@@ -99,6 +100,21 @@ bool g_isReturningToOrbit = false; // Status kamera kembali
 
 int g_framebufferWidth = SCR_WIDTH;
 int g_framebufferHeight = SCR_HEIGHT;
+
+// --- TEKSTUR LOGO BARU ---
+unsigned int g_texLogoOrbitly = 0;
+// --- AKHIR TEKSTUR LOGO ---
+
+
+// --- STATE MANAGEMENT BARU ---
+// Kita akan gunakan enum untuk status aplikasi
+enum AppState {
+    STATE_WELCOME,
+    STATE_SIMULATION
+};
+// Mulai aplikasi dari STATE_WELCOME
+AppState g_currentState = STATE_WELCOME;
+// --- AKHIR STATE MANAGEMENT ---
 
 
 // --- Kelas Shader Sederhana ---
@@ -399,6 +415,7 @@ void renderScene(Shader& shader, Shader& pickingShader, Shader& orbitShader, Sha
 
 void processPicking(std::vector<Planet>& planets, Planet& sun);
 void RenderUI();
+void RenderWelcomeScreen(); // <-- PROTOTIPE FUNGSI BARU
 
 
 // --- Main ---
@@ -464,19 +481,8 @@ int main()
     ImGui::StyleColorsDark();
 
     // --- PENGATURAN FONT BARU (LEBIH CANTIK) ---
-
-    // 1. HAPUS atau Komentari baris ini agar font custom tetap tajam (tidak blur)
-    // io.FontGlobalScale = g_uiScaleFactor; 
-
-    // 2. Muat Font "Segoe UI" dari folder Windows
-    //    Ukuran font dasar (misal 18) dikali dengan g_uiScaleFactor
     float fontSize = 18.0f * g_uiScaleFactor;
-
-    // Coba muat font Segoe UI (Font standar Windows yang bersih)
-    // Perhatikan penggunaan double backslash "\\" untuk path di Windows
     ImFont* font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdana.ttf", fontSize);
-
-    // Jika gagal (misal file tidak ketemu), kembalikan ke default
     if (font == NULL)
     {
         io.Fonts->AddFontDefault();
@@ -489,12 +495,9 @@ int main()
     style.WindowRounding = 0.0f;
     style.FrameRounding = 4.0f;
     style.GrabRounding = 4.0f;
-    // style.ScaleAllSizes(io.FontGlobalScale); // <-- Kita tidak pakai FontGlobalScale lagi
     style.ScaleAllSizes(g_uiScaleFactor); // <-- Skala manual berdasarkan faktor
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.7f); // Transparan
-    // --- REVISI 2: Batas jendela tetap ada (atau transparan, sesuai preferensi) ---
     style.Colors[ImGuiCol_Border] = ImVec4(0.3f, 0.3f, 0.3f, 0.0f); // Border tipis/transparan
-    // --- AKHIR REVISI 2 ---
 
 
     // Atur ImGui untuk GLFW dan OpenGL
@@ -513,6 +516,10 @@ int main()
     unsigned int texUranus = loadTexture("aset/uranus.jpg");
     unsigned int texNeptune = loadTexture("aset/neptun.jpg");
     unsigned int texGalaxy = loadTexture("aset/galaksi.jpg");
+
+    // --- MUAT LOGO DI SINI (LOKASI YANG BENAR) ---
+    g_texLogoOrbitly = loadTexture("aset/orbitly.png");
+    // ---------------------------------------------
 
     // --- Data Tata Surya ---
     // Planet(nama, info, tekstur, ukuran, radius_orbit, kecepatan_orbit, ID, rotasi, revolusi, jarak_ke_matahari, komposisi, fun_fact)
@@ -538,97 +545,128 @@ int main()
         "16.1 Jam", "165 Tahun Bumi", "4.5 Miliar km", "Es dan Batuan, Metana", "Neptunus adalah planet pertama yang ditemukan melalui prediksi matematika."));
 
 
-    // --- Render Loop Utama ---
+    // =========================================================
+    // ---          RENDER LOOP UTAMA (DI-REFAKTOR)          ---
+    // =========================================================
     while (!glfwWindowShouldClose(window))
     {
-        // Logika Waktu
-        float currentFrame = (float)glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-
-        if (!isPaused)
-        {
-            totalTime += deltaTime;
-        }
-
-        // Proses Input
-        processInput(window);
-
-        // --- Mulai Frame ImGui Baru
+        // --- Mulai Frame ImGui Baru (Selalu di awal) ---
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- Logika Zoom Kamera ---
-        float lerpSpeed = 5.0f * deltaTime; // Kecepatan gerak kamera
+        // --- Logika Waktu (Global) ---
+        float currentFrame = (float)glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
 
-        if (g_isCameraLocked && g_selectedPlanet != NULL)
+        // --- Logika Berdasarkan State Aplikasi ---
+        if (g_currentState == STATE_WELCOME)
         {
-            // --- LOGIKA ZOOM IN ---
-            g_isReturningToOrbit = false;
+            // 1. Proses Input Sederhana (Hanya ESC untuk keluar)
+            if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+                glfwSetWindowShouldClose(window, true);
 
-            // Hitung posisi target di belakang planet
-            float offsetDistance = g_selectedPlanet->size * 5.0f + 5.0f; // Jarak dari planet
-            glm::vec3 upOffset = glm::vec3(0.0f, g_selectedPlanet->size * 2.0f, 0.0f); // Sedikit di atas
-
-            // Dapatkan arah dari matahari (pusat) ke planet
-            glm::vec3 directionFromSun = (g_currentPlanetPosition == glm::vec3(0.0f)) ?
-                glm::vec3(0.0f, 0.0f, 1.0f) : // Jika matahari, lihat dari Z
-                glm::normalize(g_currentPlanetPosition);
-
-            glm::vec3 targetPos = g_currentPlanetPosition + (directionFromSun * offsetDistance) + upOffset;
-
-            // Hitung arah "depan" target (melihat ke planet)
-            glm::vec3 targetFront = glm::normalize(g_currentPlanetPosition - targetPos);
-
-            // Interpolasi (Lerp) kamera ke posisi dan arah target
-            cameraPos = glm::mix(cameraPos, targetPos, lerpSpeed);
-            cameraFront = glm::normalize(glm::mix(cameraFront, targetFront, lerpSpeed));
-        }
-        else if (g_isReturningToOrbit)
-        {
-            // --- LOGIKA ZOOM OUT ---
-            // Interpolasi (Lerp) kamera KEMBALI ke posisi orbit awal
-            cameraPos = glm::mix(cameraPos, ORBIT_CAMERA_POS, lerpSpeed);
-            cameraFront = glm::normalize(glm::mix(cameraFront, ORBIT_CAMERA_FRONT, lerpSpeed));
-
-            // Cek jika sudah dekat dengan posisi awal
-            if (glm::distance2(cameraPos, ORBIT_CAMERA_POS) < 0.1f)
-            {
-                cameraPos = ORBIT_CAMERA_POS; // Paskan ke posisi awal
-                cameraFront = ORBIT_CAMERA_FRONT;
-                g_isReturningToOrbit = false; // Selesai kembali
-            }
-        }
-        // --- Akhir Logika Zoom Kamera ---
-
-        // --- Logika Picking (jika diminta) ---
-        if (performPicking)
-        {
+            // 2. Bersihkan layar (Hitam polos)
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, true);
-
-            processPicking(planets, sun);
-
-            performPicking = false;
+            // 3. Render UI Selamat Datang
+            RenderWelcomeScreen();
         }
+        else if (g_currentState == STATE_SIMULATION)
+        {
+            // --- INI ADALAH KODE RENDER LOOP ANDA YANG LAMA ---
 
-        // --- Render Normal ---
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // Logika Waktu Simulasi
+            if (!isPaused)
+            {
+                totalTime += deltaTime;
+            }
 
-        renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, false);
+            // Proses Input Simulasi (WASD, Spasi, Klik, dll)
+            processInput(window);
 
-        // --- Render UI di atas segalanya
-        RenderUI();
+            // --- Logika Zoom Kamera ---
+            float lerpSpeed = 5.0f * deltaTime; // Kecepatan gerak kamera
+
+            if (g_isCameraLocked && g_selectedPlanet != NULL)
+            {
+                // --- LOGIKA ZOOM IN ---
+                g_isReturningToOrbit = false;
+
+                // Hitung posisi target di belakang planet
+                float offsetDistance = g_selectedPlanet->size * 5.0f + 5.0f; // Jarak dari planet
+                glm::vec3 upOffset = glm::vec3(0.0f, g_selectedPlanet->size * 2.0f, 0.0f); // Sedikit di atas
+
+                // Dapatkan arah dari matahari (pusat) ke planet
+                glm::vec3 directionFromSun = (g_currentPlanetPosition == glm::vec3(0.0f)) ?
+                    glm::vec3(0.0f, 0.0f, 1.0f) : // Jika matahari, lihat dari Z
+                    glm::normalize(g_currentPlanetPosition);
+
+                glm::vec3 targetPos = g_currentPlanetPosition + (directionFromSun * offsetDistance) + upOffset;
+
+                // Hitung arah "depan" target (melihat ke planet)
+                glm::vec3 targetFront = glm::normalize(g_currentPlanetPosition - targetPos);
+
+                // Interpolasi (Lerp) kamera ke posisi dan arah target
+                cameraPos = glm::mix(cameraPos, targetPos, lerpSpeed);
+                cameraFront = glm::normalize(glm::mix(cameraFront, targetFront, lerpSpeed));
+            }
+            else if (g_isReturningToOrbit)
+            {
+                // --- LOGIKA ZOOM OUT ---
+                // Interpolasi (Lerp) kamera KEMBALI ke posisi orbit awal
+                cameraPos = glm::mix(cameraPos, ORBIT_CAMERA_POS, lerpSpeed);
+                cameraFront = glm::normalize(glm::mix(cameraFront, ORBIT_CAMERA_FRONT, lerpSpeed));
+
+                // Cek jika sudah dekat dengan posisi awal
+                if (glm::distance2(cameraPos, ORBIT_CAMERA_POS) < 0.1f)
+                {
+                    cameraPos = ORBIT_CAMERA_POS; // Paskan ke posisi awal
+                    cameraFront = ORBIT_CAMERA_FRONT;
+                    g_isReturningToOrbit = false; // Selesai kembali
+                }
+            }
+            // --- Akhir Logika Zoom Kamera ---
+
+            // --- Logika Picking (jika diminta) ---
+            if (performPicking)
+            {
+                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, true);
+
+                processPicking(planets, sun);
+
+                performPicking = false;
+            }
+
+            // --- Render Normal ---
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, false);
+
+            // --- Render UI di atas segalanya
+            RenderUI();
+        }
+        // --- AKHIR LOGIKA STATE ---
+
+
+        // --- Render ImGui (Selalu di akhir, di luar state) ---
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+        // --- Tukar Buffer dan Cek Event (Selalu di akhir) ---
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+    // =========================================================
+    // ---         AKHIR RENDER LOOP UTAMA                   ---
+    // =========================================================
+
 
     // --- Shutdown ImGui
     ImGui_ImplOpenGL3_Shutdown();
@@ -780,6 +818,107 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
     }
 }
 
+// --- FUNGSI BARU UNTUK UI SELAMAT DATANG (SUDAH DIPERBAIKI LAGI) ---
+void RenderWelcomeScreen()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoTitleBar;
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
+
+    if (ImGui::Begin("WelcomeWindow", NULL, flags))
+    {
+        float windowWidth = ImGui::GetWindowSize().x;
+
+        // ===================================
+        // --- 1. TAMPILKAN LOGO (SEBAGAI GAMBAR BIASA, RASIO 1:1) ---
+        // ===================================
+        // Kita hanya perlu satu dimensi (misalnya lebar), tinggi akan mengikuti
+        float logoDimension = 150.0f * g_uiScaleFactor; // Contoh: lebar dan tinggi 150px (dikalikan skala UI)
+        float logoPosX = (windowWidth - logoDimension) * 0.5f;
+
+        // Posisikan kursor
+        ImGui::SetCursorPosX(logoPosX);
+
+        // Cek jika logo berhasil di-load
+        if (g_texLogoOrbitly != 0)
+        {
+            // Gunakan ImGui::Image BUKAN ImGui::ImageButton
+            // Parameter ImVec2(lebar, tinggi) akan sama untuk rasio 1:1
+            ImGui::Image((ImTextureID)g_texLogoOrbitly, ImVec2(logoDimension, logoDimension));
+        }
+        else
+        {
+            // JIKA GAGAL: Tampilkan teks fallback
+            const char* errorText = "Logo Gagal Dimuat";
+            float textWidth = ImGui::CalcTextSize(errorText).x;
+            ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+            ImGui::Text(errorText);
+            // Beri ruang dummy seukuran logo agar layout tidak rusak
+            ImGui::Dummy(ImVec2(logoDimension, logoDimension));
+        }
+
+        ImGui::Spacing(); // Beri jarak setelah logo
+
+        // ===================================
+        // --- 2. Judul Teks ---
+        // ===================================
+        // Semua teks di sini akan tetap terpusat secara otomatis oleh ImGui::Begin/End
+        // jika menggunakan flags ImGuiWindowFlags_AlwaysAutoResize
+        // atau kita bisa memposisikannya secara manual juga.
+        // Untuk teks yang terpusat, lebih baik pakai cara ini:
+        const char* titleLine1 = "*************************************";
+        const char* titleLine2 = "    SELAMAT DATANG DI ORBITLY    ";
+
+        ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(titleLine1).x) * 0.5f);
+        ImGui::Text(titleLine1);
+        ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(titleLine2).x) * 0.5f);
+        ImGui::Text(titleLine2);
+        ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(titleLine1).x) * 0.5f); // Ulangi untuk baris ketiga
+        ImGui::Text(titleLine1);
+
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        // ===================================
+        // --- 3. Tombol ---
+        // ===================================
+        float buttonWidth = 180.0f * g_uiScaleFactor;
+        float buttonHeight = 40.0f * g_uiScaleFactor;
+        float buttonPosX = (windowWidth - buttonWidth) * 0.5f; // Untuk centering tombol
+
+        // Tombol Mulai
+        ImGui::SetCursorPosX(buttonPosX);
+        if (ImGui::Button("Mulai", ImVec2(buttonWidth, buttonHeight)))
+        {
+            g_currentState = STATE_SIMULATION;
+        }
+
+        ImGui::Spacing();
+
+        // Tombol Keluar
+        ImGui::SetCursorPosX(buttonPosX);
+        if (ImGui::Button("Keluar", ImVec2(buttonWidth, buttonHeight)))
+        {
+            glfwSetWindowShouldClose(g_window, true);
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
+// --- AKHIR FUNGSI BARU ---
+
 // --- Fungsi UI (Revisi untuk Tombol X) ---
 void RenderUI()
 {
@@ -847,10 +986,6 @@ void RenderUI()
         // Gunakan nama planet sebagai Title Bar. 
         // g_showInfoWindow digunakan sebagai pointer bool untuk tombol tutup 'X'
         ImGui::Begin(g_selectedPlanet->name.c_str(), &g_showInfoWindow, infoFlags);
-
-        // Teks nama planet dipindahkan ke body jendela untuk menghindari duplikasi
-        // ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "** %s **", g_selectedPlanet->name.c_str());
-        // ImGui::Separator();
 
         ImGui::TextWrapped("Deskripsi: %s", g_selectedPlanet->info.c_str());
         ImGui::Separator();
