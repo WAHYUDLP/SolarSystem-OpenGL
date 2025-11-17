@@ -869,13 +869,26 @@ void RenderUI()
         if (g_isCameraLocked)
         {
             ImGui::Separator();
-            // Panduan cara mengembalikan kamera
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Mode Fokus Aktif:");
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Tutup jendela ini (X) untuk melepas fokus!");
+
+            // --- REVISI UNTUK TEKS FOKUS ---
+
+            // Atur warna teks menjadi merah
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
+
+            // Gunakan TextWrapped agar teks bisa turun baris jika tidak muat
+            ImGui::TextWrapped("Mode Fokus Aktif:");
+
+            // Tambahkan spasi vertikal kecil
+            ImGui::Spacing();
+
+            ImGui::TextWrapped("Tutup jendela ini (X) untuk melepas fokus!");
+
+            // Kembalikan warna teks ke normal
+            ImGui::PopStyleColor();
+            // --- AKHIR REVISI ---
         }
 
         ImGui::End();
-        // --- AKHIR REVISI 3 ---
     }
 
     // Logika menutup jendela info (Tombol 'X' dari Title Bar akan mengatur g_showInfoWindow = false)
