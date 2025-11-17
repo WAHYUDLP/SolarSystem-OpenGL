@@ -1,23 +1,18 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-// --- REVISI --- Tambahkan define ini SEBELUM include glm
 #define GLM_ENABLE_EXPERIMENTAL
-// --- AKHIR REVISI ---
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/norm.hpp> // --- REVISI --- Untuk glm::mix (interpolasi)
-#include <glm/gtx/compatibility.hpp> // --- REVISI --- Untuk glm::distance2
+#include <glm/gtx/norm.hpp> 
+#include <glm/gtx/compatibility.hpp> 
 
-// --- REVISI --- Tambahkan header untuk ImGui
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-// --- AKHIR REVISI ---
 
-// Tambahkan ini untuk memuat stb_image
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -28,7 +23,6 @@
 #include <sstream>
 #include <map>
 
-// --- REVISI --- Memindahkan definisi struct Planet ke ATAS ---
 // --- Struktur Data Planet ---
 struct Planet
 {
@@ -40,11 +34,21 @@ struct Planet
     float orbitSpeedFactor;
     int objectID;
 
-    Planet(std::string n, std::string i, unsigned int tex, float s, float o, float os, int id)
-        : name(n), info(i), textureID(tex), size(s), orbitRadius(o), orbitSpeedFactor(os), objectID(id) {
+    // --- DATA PLANET BARU ---
+    std::string rotationPeriod;
+    std::string revolutionPeriod;
+    std::string distanceToSun;
+    std::string composition;
+    std::string funFact;
+    // --- AKHIR REVISI ---
+
+    // Konstruktor yang diperbarui
+    Planet(std::string n, std::string i, unsigned int tex, float s, float o, float os, int id,
+        std::string rotP, std::string revP, std::string distS, std::string comp, std::string ffact)
+        : name(n), info(i), textureID(tex), size(s), orbitRadius(o), orbitSpeedFactor(os), objectID(id),
+        rotationPeriod(rotP), revolutionPeriod(revP), distanceToSun(distS), composition(comp), funFact(ffact) {
     }
 };
-// --- AKHIR REVISI ---
 
 
 // --- Deklarasi Global ---
@@ -53,10 +57,9 @@ struct Planet
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-// --- REVISI --- Konstanta untuk posisi kamera awal
+// Konstanta untuk posisi kamera awal
 const glm::vec3 ORBIT_CAMERA_POS = glm::vec3(0.0f, 40.0f, 120.0f);
 const glm::vec3 ORBIT_CAMERA_FRONT = glm::vec3(0.0f, -0.25f, -1.0f);
-// --- AKHIR REVISI ---
 
 // Kamera
 glm::vec3 cameraPos = ORBIT_CAMERA_POS;
@@ -78,28 +81,27 @@ float orbitSpeed = 0.1f;
 double mouseClickX, mouseClickY;
 bool performPicking = false;
 
-// --- Variabel Global untuk UI & Zoom ---
+// Variabel Global untuk UI & Zoom
 GLFWwindow* g_window = NULL;
 bool isPaused = false;
 bool spacePressed = false;
 float totalTime = 0.0f;
-const float g_uiScaleFactor = 2.0f;
+// Skala UI
+const float g_uiScaleFactor = 1.5f;
 
 Planet* g_selectedPlanet = NULL;
 bool g_showInfoWindow = false;
 
-// --- REVISI --- Variabel untuk Zoom Kamera ---
+// Variabel untuk Zoom Kamera
 bool g_isCameraLocked = false;
 glm::vec3 g_currentPlanetPosition = glm::vec3(0.0f);
-bool g_isReturningToOrbit = false; // --- REVISI BARU --- Status kamera kembali
-// --- AKHIR REVISI ---
+bool g_isReturningToOrbit = false; // Status kamera kembali
 
 int g_framebufferWidth = SCR_WIDTH;
 int g_framebufferHeight = SCR_HEIGHT;
 
 
 // --- Kelas Shader Sederhana ---
-// (Tidak ada perubahan)
 class Shader
 {
 public:
@@ -182,7 +184,6 @@ private:
 };
 
 // --- Kelas Sphere Sederhana ---
-// (Tidak ada perubahan)
 class Sphere
 {
 public:
@@ -273,20 +274,18 @@ public:
     }
 };
 
-// --- REVISI --- Kelas baru untuk Cincin (sekarang geometris) ---
+// --- Kelas baru untuk Cincin (sekarang geometris) ---
 class Ring
 {
 public:
-    // --- REVISI --- Hapus ebo, kita pakai glDrawArrays
     unsigned int vao = 0, vbo = 0;
-    unsigned int vertexCount; // --- REVISI --- ganti nama dari indexCount
+    unsigned int vertexCount;
 
-    // --- REVISI --- Constructor diganti total untuk membuat annulus
-    Ring(int segments = 64) // Radius di-hardcode ke 1.0 (luar) dan 0.6 (dalam)
+    Ring(int segments = 64)
     {
         const float PI = 3.14159265359f;
-        const float innerRadius = 0.6f; // Radius dalam (0.6 * skala)
-        const float outerRadius = 1.0f; // Radius luar (1.0 * skala)
+        const float innerRadius = 0.6f;
+        const float outerRadius = 1.0f;
 
         std::vector<float> data; // Format: X, Y, Z, U, V
 
@@ -299,24 +298,22 @@ public:
             // --- Vertex Luar ---
             float outerX = cosA * outerRadius;
             float outerZ = sinA * outerRadius;
-            data.push_back(outerX);             // pos.x
-            data.push_back(0.0f);               // pos.y
-            data.push_back(outerZ);             // pos.z
-            // Petakan tex coord berdasarkan posisi (mengasumsikan tekstur .png menutupi -1..1)
-            data.push_back(outerX * 0.5f + 0.5f); // tex.u (dari -1..1 -> 0..1)
-            data.push_back(outerZ * 0.5f + 0.5f); // tex.v (dari -1..1 -> 0..1)
+            data.push_back(outerX);
+            data.push_back(0.0f);
+            data.push_back(outerZ);
+            data.push_back(outerX * 0.5f + 0.5f);
+            data.push_back(outerZ * 0.5f + 0.5f);
 
             // --- Vertex Dalam ---
             float innerX = cosA * innerRadius;
             float innerZ = sinA * innerRadius;
-            data.push_back(innerX);             // pos.x
-            data.push_back(0.0f);               // pos.y
-            data.push_back(innerZ);             // pos.z
-            data.push_back(innerX * 0.5f + 0.5f); // tex.u
-            data.push_back(innerZ * 0.5f + 0.5f); // tex.v
+            data.push_back(innerX);
+            data.push_back(0.0f);
+            data.push_back(innerZ);
+            data.push_back(innerX * 0.5f + 0.5f);
+            data.push_back(innerZ * 0.5f + 0.5f);
         }
 
-        // Kita punya (segments + 1) * 2 total vertex
         vertexCount = (segments + 1) * 2;
 
         glGenVertexArrays(1, &vao);
@@ -340,15 +337,12 @@ public:
     void Draw()
     {
         glBindVertexArray(vao);
-        // --- REVISSI --- Gunakan glDrawArrays dengan GL_TRIANGLE_STRIP
         glDrawArrays(GL_TRIANGLE_STRIP, 0, vertexCount);
         glBindVertexArray(0);
     }
 };
-// --- AKHIR REVISI ---
 
 // --- Kelas OrbitLine ---
-// (Tidak ada perubahan)
 class OrbitLine
 {
 public:
@@ -400,9 +394,9 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 void processInput(GLFWwindow* window);
 unsigned int loadTexture(char const* path);
-// --- REVISI --- Tambahkan Ring& dan texture ID cincin DAN skybox
+
 void renderScene(Shader& shader, Shader& pickingShader, Shader& orbitShader, Shader& skyboxShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, unsigned int texGalaxy, bool isPicking);
-// --- AKHIR REVISI ---
+
 void processPicking(std::vector<Planet>& planets, Planet& sun);
 void RenderUI();
 
@@ -447,22 +441,20 @@ int main()
 
     // Aktifkan Uji Kedalaman, MSAA, dan Blending
     glEnable(GL_DEPTH_TEST);
-    // --- REVISI --- Ganti fungsi depth test untuk skybox
-    glDepthFunc(GL_LEQUAL); // Default-nya GL_LESS
-    // --- AKHIR REVISI ---
+    glDepthFunc(GL_LEQUAL); // Ganti fungsi depth test untuk skybox
     glEnable(GL_MULTISAMPLE);
-    glEnable(GL_BLEND); // --- REVISI --- Pastikan blending aktif untuk cincin
+    glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Buat Shader
     Shader mainShader("shader.vs", "shader.fs");
     Shader pickingShader("picking.vs", "picking.fs");
     Shader orbitShader("orbit.vs", "orbit.fs");
-    Shader skyboxShader("skybox.vs", "skybox.fs"); // --- REVISI --- Muat shader skybox
+    Shader skyboxShader("skybox.vs", "skybox.fs");
 
     // Buat Mesh
     Sphere sphere;
-    Ring ring; // --- REVISI --- Buat objek cincin
+    Ring ring;
     OrbitLine orbitLine;
 
     // --- Inisialisasi ImGui ---
@@ -471,13 +463,39 @@ int main()
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
 
-    // --- Perbesar skala font dan UI
-    io.FontGlobalScale = g_uiScaleFactor;
+    // --- PENGATURAN FONT BARU (LEBIH CANTIK) ---
+
+    // 1. HAPUS atau Komentari baris ini agar font custom tetap tajam (tidak blur)
+    // io.FontGlobalScale = g_uiScaleFactor; 
+
+    // 2. Muat Font "Segoe UI" dari folder Windows
+    //    Ukuran font dasar (misal 18) dikali dengan g_uiScaleFactor
+    float fontSize = 18.0f * g_uiScaleFactor;
+
+    // Coba muat font Segoe UI (Font standar Windows yang bersih)
+    // Perhatikan penggunaan double backslash "\\" untuk path di Windows
+    ImFont* font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdana.ttf", fontSize);
+
+    // Jika gagal (misal file tidak ketemu), kembalikan ke default
+    if (font == NULL)
+    {
+        io.Fonts->AddFontDefault();
+    }
+    // --- AKHIR PENGATURAN FONT ---
+
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 5.0f;
+
+    // REVISI STYLE: Jendela transparan dan datar (HUD style)
+    style.WindowRounding = 0.0f;
     style.FrameRounding = 4.0f;
     style.GrabRounding = 4.0f;
-    style.ScaleAllSizes(g_uiScaleFactor);
+    // style.ScaleAllSizes(io.FontGlobalScale); // <-- Kita tidak pakai FontGlobalScale lagi
+    style.ScaleAllSizes(g_uiScaleFactor); // <-- Skala manual berdasarkan faktor
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.7f); // Transparan
+    // --- REVISI 2: Batas jendela tetap ada (atau transparan, sesuai preferensi) ---
+    style.Colors[ImGuiCol_Border] = ImVec4(0.3f, 0.3f, 0.3f, 0.0f); // Border tipis/transparan
+    // --- AKHIR REVISI 2 ---
+
 
     // Atur ImGui untuk GLFW dan OpenGL
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -491,23 +509,33 @@ int main()
     unsigned int texMars = loadTexture("aset/mars.jpg");
     unsigned int texJupiter = loadTexture("aset/jupiter.jpg");
     unsigned int texSaturn = loadTexture("aset/saturnus.jpg");
-    unsigned int texSaturnRing = loadTexture("aset/saturnus_cincin.png"); // --- REVISI --- Muat tekstur cincin
+    unsigned int texSaturnRing = loadTexture("aset/saturnus_cincin.png");
     unsigned int texUranus = loadTexture("aset/uranus.jpg");
     unsigned int texNeptune = loadTexture("aset/neptun.jpg");
-    unsigned int texGalaxy = loadTexture("aset/galaksi.jpg"); // --- REVISI --- Muat tekstur galaksi
+    unsigned int texGalaxy = loadTexture("aset/galaksi.jpg");
 
-    // Data Tata Surya
-    Planet sun("Matahari", "Bintang di pusat Tata Surya.", texSun, 3.5f, 0.0f, 0.0f, 1);
+    // --- Data Tata Surya ---
+    // Planet(nama, info, tekstur, ukuran, radius_orbit, kecepatan_orbit, ID, rotasi, revolusi, jarak_ke_matahari, komposisi, fun_fact)
+    Planet sun("Matahari", "Bintang di pusat Tata Surya.", texSun, 3.5f, 0.0f, 0.0f, 1,
+        "25 hari (Ekuator)", "N/A", "0 Juta km", "Hidrogen dan Helium", "Massa Matahari mencakup 99,8% dari total massa Tata Surya.");
 
     std::vector<Planet> planets;
-    planets.push_back(Planet("Merkurius", "Planet terkecil dan terdekat dengan Matahari.", texMercury, 0.5f, 10.0f, 4.7f, 2));
-    planets.push_back(Planet("Venus", "Planet terpanas di Tata Surya.", texVenus, 0.9f, 15.0f, 3.5f, 3));
-    planets.push_back(Planet("Bumi", "Satu-satunya planet yang diketahui memiliki kehidupan.", texEarth, 1.0f, 21.0f, 2.9f, 4));
-    planets.push_back(Planet("Mars", "Planet merah, memiliki gunung tertinggi.", texMars, 0.7f, 28.0f, 2.4f, 5));
-    planets.push_back(Planet("Jupiter", "Planet terbesar, memiliki Bintik Merah Raksasa.", texJupiter, 3.0f, 40.0f, 1.3f, 6));
-    planets.push_back(Planet("Saturnus", "Dikenal karena sistem cincinnya.", texSaturn, 2.5f, 55.0f, 0.9f, 7));
-    planets.push_back(Planet("Uranus", "Raksasa es yang berotasi miring.", texUranus, 1.5f, 68.0f, 0.6f, 8));
-    planets.push_back(Planet("Neptunus", "Planet terjauh, raksasa es berwarna biru.", texNeptune, 1.4f, 80.0f, 0.5f, 9));
+    planets.push_back(Planet("Merkurius", "Planet terkecil dan terdekat dengan Matahari.", texMercury, 0.5f, 10.0f, 4.7f, 2,
+        "59 Hari Bumi", "88 Hari Bumi", "58 Juta km", "Batuan Silikat dan Logam Berat", "Satu hari di Merkurius lebih lama dari satu tahunnya."));
+    planets.push_back(Planet("Venus", "Planet terpanas di Tata Surya.", texVenus, 0.9f, 15.0f, 3.5f, 3,
+        "243 Hari Bumi (Mundur)", "225 Hari Bumi", "108 Juta km", "Batuan Silikat dan Lapisan CO2 Tebal", "Venus berputar ke belakang relatif terhadap sebagian besar planet lain."));
+    planets.push_back(Planet("Bumi", "Satu-satunya planet yang diketahui memiliki kehidupan.", texEarth, 1.0f, 21.0f, 2.9f, 4,
+        "24 Jam", "365 Hari", "150 Juta km", "Batuan Silikat, Air, dan Atmosfer Nitrogen-Oksigen", "Bumi adalah planet terpadat di Tata Surya."));
+    planets.push_back(Planet("Mars", "Planet merah, memiliki gunung tertinggi.", texMars, 0.7f, 28.0f, 2.4f, 5,
+        "24.6 Jam", "687 Hari Bumi", "228 Juta km", "Batuan Basal, Besi Oksida", "Mars memiliki gunung tertinggi di Tata Surya, Olympus Mons."));
+    planets.push_back(Planet("Jupiter", "Planet terbesar, memiliki Bintik Merah Raksasa.", texJupiter, 3.0f, 40.0f, 1.3f, 6,
+        "9.9 Jam", "11.9 Tahun Bumi", "778 Juta km", "Hidrogen dan Helium", "Jupiter memiliki badai raksasa yang dikenal sebagai Bintik Merah Raksasa."));
+    planets.push_back(Planet("Saturnus", "Dikenal karena sistem cincinnya.", texSaturn, 2.5f, 55.0f, 0.9f, 7,
+        "10.7 Jam", "29.5 Tahun Bumi", "1.4 Miliar km", "Hidrogen dan Helium, Inti Padat", "Cincinnya sebagian besar terbuat dari es air."));
+    planets.push_back(Planet("Uranus", "Raksasa es yang berotasi miring.", texUranus, 1.5f, 68.0f, 0.6f, 8,
+        "17.2 Jam (Mundur)", "84 Tahun Bumi", "2.9 Miliar km", "Es (Air, Metana, Amonia), Hidrogen, Helium", "Uranus berputar hampir menyamping."));
+    planets.push_back(Planet("Neptunus", "Planet terjauh, raksasa es berwarna biru.", texNeptune, 1.4f, 80.0f, 0.5f, 9,
+        "16.1 Jam", "165 Tahun Bumi", "4.5 Miliar km", "Es dan Batuan, Metana", "Neptunus adalah planet pertama yang ditemukan melalui prediksi matematika."));
 
 
     // --- Render Loop Utama ---
@@ -531,13 +559,13 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- REVISI --- Logika Zoom Kamera ---
+        // --- Logika Zoom Kamera ---
         float lerpSpeed = 5.0f * deltaTime; // Kecepatan gerak kamera
 
         if (g_isCameraLocked && g_selectedPlanet != NULL)
         {
             // --- LOGIKA ZOOM IN ---
-            g_isReturningToOrbit = false; // Pastikan kita tidak mencoba kembali
+            g_isReturningToOrbit = false;
 
             // Hitung posisi target di belakang planet
             float offsetDistance = g_selectedPlanet->size * 5.0f + 5.0f; // Jarak dari planet
@@ -572,7 +600,7 @@ int main()
                 g_isReturningToOrbit = false; // Selesai kembali
             }
         }
-        // --- AKHIR REVISI ---
+        // --- Akhir Logika Zoom Kamera ---
 
         // --- Logika Picking (jika diminta) ---
         if (performPicking)
@@ -580,7 +608,6 @@ int main()
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // --- REVISI --- Tambahkan ring, texSaturnRing, skyboxShader, texGalaxy
             renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, true);
 
             processPicking(planets, sun);
@@ -592,7 +619,6 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // --- REVISI --- Tambahkan ring, texSaturnRing, skyboxShader, texGalaxy
         renderScene(mainShader, pickingShader, orbitShader, skyboxShader, sphere, ring, orbitLine, planets, sun, texSaturnRing, texGalaxy, false);
 
         // --- Render UI di atas segalanya
@@ -617,24 +643,21 @@ int main()
 
 // --- Implementasi Fungsi ---
 
-// --- REVISI --- Tambahkan Shader& skyboxShader, unsigned int texGalaxy
 void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader, Shader& skyboxShader, Sphere& sphere, Ring& ring, OrbitLine& orbitLine, std::vector<Planet>& planets, Planet& sun, unsigned int texSaturnRing, unsigned int texGalaxy, bool isPicking)
 {
     Shader& activeShader = isPicking ? pickingShader : mainShader;
 
-    // --- REVISI --- Pindahkan 'use' dan 'set uniforms' ke *setelah* skybox
-    //                agar skybox digambar LEBIH DULU
+    // Hitung View dan Projection
+    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)g_framebufferWidth / (float)g_framebufferHeight, 0.1f, 200.0f);
+    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
-    // --- REVISI --- Gambar Skybox (di paling awal, kecuali saat picking) ---
+    // --- Gambar Skybox (di paling awal, kecuali saat picking) ---
     if (!isPicking)
     {
-        // Kita menggunakan glDepthFunc(GL_LEQUAL) dari main()
         skyboxShader.use();
 
         // Buat view matrix HANYA untuk rotasi
-        // Hapus info translasi (posisi) dari kamera
-        glm::mat4 skyboxView = glm::mat4(glm::mat3(glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp)));
-        glm::mat4 projection = glm::perspective(glm::radians(fov), (float)g_framebufferWidth / (float)g_framebufferHeight, 0.1f, 200.0f);
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
 
         skyboxShader.setMat4("view", skyboxView);
         skyboxShader.setMat4("projection", projection);
@@ -647,17 +670,11 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
         // Kita gunakan mesh Sphere yang sama untuk menggambar skybox!
         sphere.Draw();
     }
-    // --- AKHIR REVISI ---
+    // --- Akhir Skybox ---
 
 
     // --- Sekarang gambar sisa scene ---
     activeShader.use();
-
-    // --- REVISI --- Kita perlu menghitung view matrix secara manual di sini
-    // karena cameraPos dan cameraFront di-update oleh logika zoom
-    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)g_framebufferWidth / (float)g_framebufferHeight, 0.1f, 200.0f);
-    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    // --- AKHIR REVISI ---
 
     activeShader.setMat4("projection", projection);
     activeShader.setMat4("view", view);
@@ -679,7 +696,6 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sun.textureID);
         activeShader.setInt("texture_diffuse1", 0);
-        // --- REVISI --- Biarkan Matahari menyala (tidak pakai tekstur)
         activeShader.setBool("isSun", true);
     }
     sphere.Draw();
@@ -720,10 +736,9 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
 
         sphere.Draw();
 
-        // --- REVISI --- Gambar Cincin Saturnus ---
+        // --- Gambar Cincin Saturnus ---
         if (planet.name == "Saturnus" && !isPicking)
         {
-            // Matikan penulisan ke depth buffer agar transparansi bekerja
             glDepthMask(GL_FALSE);
 
             // Gunakan tekstur cincin
@@ -735,8 +750,8 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
             glm::mat4 modelRing = glm::mat4(1.0f);
             modelRing = glm::translate(modelRing, currentPos); // Posisi sama dengan planet
             // Miringkan cincin sedikit
-            modelRing = glm::rotate(modelRing, glm::radians(45.0f), glm::normalize(glm::vec3(0.5f, 0.0f, 0.5f))); // Sebelumnya 25.0f            // --- REVISI --- Buat skala cincin sedikit lebih kecil
-            modelRing = glm::scale(modelRing, glm::vec3(planet.size * 1.8f)); // Sebelumnya 2.2f
+            modelRing = glm::rotate(modelRing, glm::radians(45.0f), glm::normalize(glm::vec3(0.5f, 0.0f, 0.5f)));
+            modelRing = glm::scale(modelRing, glm::vec3(planet.size * 1.8f));
             activeShader.setMat4("model", modelRing);
 
             // Gambar cincin
@@ -745,7 +760,7 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
             // Nyalakan kembali penulisan ke depth buffer
             glDepthMask(GL_TRUE);
         }
-        // --- AKHIR REVISI ---
+        // --- Akhir Cincin Saturnus ---
     }
 
     // --- Gambar Garis Orbit ---
@@ -763,79 +778,116 @@ void renderScene(Shader& mainShader, Shader& pickingShader, Shader& orbitShader,
             orbitLine.Draw();
         }
     }
-
-    // --- REVISI --- Hapus skybox dari sini, pindah ke atas
 }
 
-// --- Fungsi UI Baru ---
+// --- Fungsi UI (Revisi untuk Tombol X) ---
 void RenderUI()
 {
     ImGuiIO& io = ImGui::GetIO();
-    float padding = 10.0f * g_uiScaleFactor;
+    // Gunakan faktor skala global kita, bukan io.FontGlobalScale
+    float padding = 15.0f * g_uiScaleFactor;
 
-    // Jendela Info Planet (pojok kanan atas, stagnan)
-    if (g_showInfoWindow && g_selectedPlanet != NULL)
-    {
-        // --- REVISI --- Ukuran disesuaikan sedikit untuk teks baru
-        ImGui::SetNextWindowSize(ImVec2(500, 260), ImGuiCond_FirstUseEver);
+    // --- FLAGS GLOBAL UNTUK KONTROL SIMULASI ---
+    ImGuiWindowFlags controlFlags = ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoScrollbar;
 
-        ImVec2 infoWindowPos = ImVec2(io.DisplaySize.x - padding, padding);
-        ImGui::SetNextWindowPos(infoWindowPos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-
-        ImGuiWindowFlags infoWindowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
-
-        ImGui::Begin("Informasi Planet", &g_showInfoWindow, infoWindowFlags);
-
-        ImGui::Text("Nama: %s", g_selectedPlanet->name.c_str());
-        ImGui::Separator();
-
-        ImGui::TextWrapped("Info: %s", g_selectedPlanet->info.c_str());
-
-        // --- REVISI DARI PERCAKAPAN SEBELUMNYA ---
-        // Teks bantuan untuk melepas fokus
-        if (g_isCameraLocked)
-        {
-            ImGui::Separator();
-            ImGui::TextWrapped("Tutup jendela ini (X) untuk melepas fokus.");
-        }
-        // --- AKHIR REVISI ---
-
-        ImGui::End();
-    }
-
-    // --- REVISI --- Jika pengguna menutup jendela info, lepas kunci kamera
-    if (!g_showInfoWindow)
-    {
-        g_selectedPlanet = NULL;
-        if (g_isCameraLocked) // Hanya jika sedang terkunci
-        {
-            g_isCameraLocked = false;
-            g_isReturningToOrbit = true; // --- REVISI --- Mulai kembali ke orbit
-        }
-    }
-    // --- AKHIR REVISI ---
-
-    // Jendela Kontrol Simulasi (pojok kiri atas, bisa digeser)
-    ImGui::SetNextWindowSize(ImVec2(500, 320), ImGuiCond_FirstUseEver);
-
+    // ===========================================
+    // 1. PANEL KONTROL SIMULASI (Kiri Atas)
+    // ===========================================
     ImVec2 controlWindowPos = ImVec2(padding, padding);
-    ImGui::SetNextWindowPos(controlWindowPos, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(controlWindowPos, ImGuiCond_Always, ImVec2(0.0f, 0.0f));
 
-    ImGui::Begin("Kontrol Simulasi");
+    ImGui::Begin("Kontrol Simulasi", NULL, controlFlags);
+
+    // Kecepatan Orbit
+    ImGui::SetNextItemWidth(150.0f * g_uiScaleFactor);
+    ImGui::SliderFloat("Kecepatan Orbit", &orbitSpeed, 0.0f, 2.0f, "%.2f x");
+    if (orbitSpeed < 0.0f) orbitSpeed = 0.0f;
+
+    // Tombol Jeda/Lanjutkan
+    ImGui::Separator();
     ImGui::Text("Status: %s", isPaused ? "Dijeda" : "Berjalan");
-    if (ImGui::Button(isPaused ? "Lanjutkan (Spasi)" : "Jeda (Spasi)"))
+    if (ImGui::Button(isPaused ? "Lanjutkan (Spasi)" : "Jeda (Spasi)", ImVec2(150.0f * g_uiScaleFactor, 0)))
     {
         isPaused = !isPaused;
     }
 
     ImGui::Separator();
-    ImGui::TextWrapped("Tombol Panah Atas/Bawah untuk kecepatan orbit.");
-    ImGui::TextWrapped("Klik Kanan pada planet untuk info.");
-    ImGui::TextWrapped("Klik Kiri + Geser Mouse untuk rotasi kamera.");
-    ImGui::TextWrapped("WASD untuk gerak kamera.");
-    ImGui::TextWrapped("Scroll wheel untuk zoom.");
-
+    ImGui::TextWrapped("Kontrol Kamera:");
+    ImGui::BulletText("WASD: Gerak bebas");
+    ImGui::BulletText("Klik Kiri/Geser: Rotasi");
+    ImGui::BulletText("Scroll: Zoom FOV");
+    ImGui::BulletText("Klik Kanan: Info/Fokus");
     ImGui::End();
+
+    // ===========================================
+    // 2. PANEL INFORMASI PLANET (Kanan Tengah, Dengan Title Bar Minimalis)
+    // ===========================================
+    if (g_showInfoWindow && g_selectedPlanet != NULL)
+    {
+        // Posisi Kanan Tengah (X=ujung kanan, Y=tengah layar)
+        ImVec2 infoWindowPos = ImVec2(io.DisplaySize.x - padding, io.DisplaySize.y * 0.5f);
+        ImGui::SetNextWindowPos(infoWindowPos, ImGuiCond_Always, ImVec2(1.0f, 0.5f));
+
+        // Lebar dikecilkan (300)
+        ImGui::SetNextWindowSize(ImVec2(300 * g_uiScaleFactor, 0.0f), ImGuiCond_Always);
+
+        // --- REVISI 3: Flags untuk Jendela Info ---
+        // Hapus NoTitleBar agar tombol 'X' terlihat.
+        ImGuiWindowFlags infoFlags = ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoScrollbar;
+
+        // Gunakan nama planet sebagai Title Bar. 
+        // g_showInfoWindow digunakan sebagai pointer bool untuk tombol tutup 'X'
+        ImGui::Begin(g_selectedPlanet->name.c_str(), &g_showInfoWindow, infoFlags);
+
+        // Teks nama planet dipindahkan ke body jendela untuk menghindari duplikasi
+        // ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "** %s **", g_selectedPlanet->name.c_str());
+        // ImGui::Separator();
+
+        ImGui::TextWrapped("Deskripsi: %s", g_selectedPlanet->info.c_str());
+        ImGui::Separator();
+
+        ImGui::Text("Detail Teknis:");
+        ImGui::BulletText("Rotasi: %s", g_selectedPlanet->rotationPeriod.c_str());
+        ImGui::BulletText("Revolusi: %s", g_selectedPlanet->revolutionPeriod.c_str());
+        ImGui::BulletText("Jarak Matahari: %s", g_selectedPlanet->distanceToSun.c_str());
+        ImGui::BulletText("Ukuran Relatif: %.1f", g_selectedPlanet->size);
+        ImGui::BulletText("Komposisi: %s", g_selectedPlanet->composition.c_str());
+        ImGui::Separator();
+
+        ImGui::Text("Fakta Menarik:");
+        ImGui::TextWrapped("%s", g_selectedPlanet->funFact.c_str());
+
+        if (g_isCameraLocked)
+        {
+            ImGui::Separator();
+            // Panduan cara mengembalikan kamera
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Mode Fokus Aktif:");
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Tutup jendela ini (X) untuk melepas fokus!");
+        }
+
+        ImGui::End();
+        // --- AKHIR REVISI 3 ---
+    }
+
+    // Logika menutup jendela info (Tombol 'X' dari Title Bar akan mengatur g_showInfoWindow = false)
+    if (!g_showInfoWindow)
+    {
+        g_selectedPlanet = NULL;
+        if (g_isCameraLocked)
+        {
+            g_isCameraLocked = false;
+            g_isReturningToOrbit = true;
+        }
+    }
 }
 
 
@@ -857,7 +909,7 @@ void processPicking(std::vector<Planet>& planets, Planet& sun)
 
     if (pickedID == 0)
     {
-        g_isReturningToOrbit = true; // --- REVISI --- Kembali ke orbit jika klik angkasa
+        g_isReturningToOrbit = true; // Kembali ke orbit jika klik angkasa
         return;
     }
     else if (pickedID == sun.objectID)
@@ -865,7 +917,7 @@ void processPicking(std::vector<Planet>& planets, Planet& sun)
         g_selectedPlanet = &sun;
         g_showInfoWindow = true;
         g_isCameraLocked = true;
-        g_isReturningToOrbit = false; // --- REVISI --- Zoom IN, jangan zoom out
+        g_isReturningToOrbit = false;
     }
     else
     {
@@ -876,7 +928,7 @@ void processPicking(std::vector<Planet>& planets, Planet& sun)
                 g_selectedPlanet = &planet;
                 g_showInfoWindow = true;
                 g_isCameraLocked = true;
-                g_isReturningToOrbit = false; // --- REVISI --- Zoom IN, jangan zoom out
+                g_isReturningToOrbit = false;
                 break;
             }
         }
@@ -885,7 +937,6 @@ void processPicking(std::vector<Planet>& planets, Planet& sun)
 
 
 // Fungsi untuk memuat tekstur
-// (Tidak ada perubahan)
 unsigned int loadTexture(char const* path)
 {
     unsigned int textureID;
@@ -901,7 +952,7 @@ unsigned int loadTexture(char const* path)
         else if (nrComponents == 3)
             format = GL_RGB;
         else if (nrComponents == 4)
-            format = GL_RGBA; // --- REVISI --- Ini penting untuk cincin (file .png)
+            format = GL_RGBA; // Penting untuk gambar .png transparan (cincin)
         else {
             std::cout << "Format gambar tidak didukung untuk " << path << std::endl;
             stbi_image_free(data);
@@ -912,12 +963,8 @@ unsigned int loadTexture(char const* path)
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        // --- REVISI --- Ganti mode wrapping untuk skybox (dan planet)
-        // GL_CLAMP_TO_EDGE lebih baik untuk memetakan tekstur ke bola (mencegah "seam" di kutub)
-        // daripada GL_REPEAT.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Sebelumnya GL_REPEAT
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Sebelumnya GL_REPEAT
-        // --- AKHIR REVISI ---
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -950,14 +997,15 @@ void processInput(GLFWwindow* window)
 
     if (isMoving && g_isCameraLocked)
     {
+        // Gerakan WASD otomatis melepas kunci kamera
         g_isCameraLocked = false;
         g_showInfoWindow = false;
-        g_isReturningToOrbit = true; // --- REVISI --- Mulai kembali ke orbit
+        g_isReturningToOrbit = true;
     }
 
-    // Kontrol Kamera (WASD) - Hanya bergerak jika tidak terkunci ATAU sedang kembali
+    // Kontrol Kamera (WASD) - Hanya bergerak jika tidak terkunci
     float cameraSpeed = 2.5f * deltaTime * 10.0f;
-    if (!g_isCameraLocked) // --- REVISI --- Izinkan WASD jika tidak terkunci (termasuk saat kembali)
+    if (!g_isCameraLocked)
     {
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             cameraPos += cameraSpeed * cameraFront;
@@ -1012,20 +1060,17 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        // --- REVISI --- Lepas kunci kamera jika pengguna mengklik & menyeret
+        // Klik & seret mouse melepas kunci kamera
         if (g_isCameraLocked)
         {
             g_isCameraLocked = false;
             g_showInfoWindow = false;
-            g_isReturningToOrbit = true; // --- REVISI --- Mulai kembali ke orbit
+            g_isReturningToOrbit = true;
         }
-        // Jika sedang kembali, biarkan pengguna mengambil alih
         if (g_isReturningToOrbit)
         {
             g_isReturningToOrbit = false;
         }
-        // --- AKHIR REVISI ---
-
 
         if (firstMouse)
         {
@@ -1081,6 +1126,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
     ImGuiIO& io = ImGui::GetIO();
+    // Prioritaskan ImGui untuk klik di UI
     if (io.WantCaptureMouse)
     {
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
@@ -1090,6 +1136,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         return;
     }
 
+    // Hanya deteksi klik kanan di luar UI
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         performPicking = true;
